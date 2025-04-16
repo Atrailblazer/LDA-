@@ -1,7 +1,8 @@
 import jieba
 from gensim import corpora, models
 import pandas as pd
-
+import math
+import numpy as np
 # 读取 Excel 文件
 def read_excel(file_path):
     try:
@@ -30,10 +31,41 @@ def remove_punctuation(input_string):
     translator = str.maketrans('', '', all_punctuation)
     return input_string.translate(translator)
 
+#计算tf
+def tf(doc_words):
+    sum_list = list(set(word for word in doc_words))
+    words_len = len(doc_words)
+    word_dict = {word:0 for word in sum_list}
+    for word1 in sum_list:
+        for word2 in doc_words:
+            if word1 == word2:
+                word_dict[word1] += 1
+    tf_dict = {}
+    for word,count in word_dict.items():
+        tf_dict[word] = count/words_len
+
+    # print(tf_dict)
+    return tf_dict
+
+# 计算IDF
+def idf(doc_list):
+    sum_list = list(set([word_i for doc_i in doc_list for word_i in doc_i]))
+    idf_dict = {word_i: 0 for word_i in sum_list}
+    for word_j in sum_list:
+        for doc_j in doc_list:
+            if word_j in doc_j:
+                idf_dict[word_j] += 1
+    return {k: math.log(len(doc_list) / (v + 1)) for k, v in idf_dict.items()}
+
+def tf_idf(tf_dict,idf_dict):
+    tfidf = {}
+    for word,tf_value in tf_dict.items():
+        tfidf[word] = tf_value * idf_dict[word]
+    return tfidf
 # 主程序
 if __name__ == "__main__":
     # 文件路径1
-    file_path = r"D:\项目\八爪鱼\微博\新能源\人民网-新能源.xlsx"
+    file_path = r"D:\项目\LDA_data\人民网-新能源1.xlsx"
 
     # 读取文件
     documents = read_excel(file_path)
@@ -101,18 +133,84 @@ if __name__ == "__main__":
 
     # 文本清洗和分词
     cleaned_texts = []
+    tf_list = []
+    # tf_idf_list = []
+    documents_single = {""}
     for document in documents:
+        # 去除停用词
         no_punct = remove_punctuation(document)
-        tokens = tokenize(no_punct)
-        print(tokens)
+        documents_single.add(no_punct)
+
+    for document in documents_single:
+        # 去除停用词
+        # no_punct = remove_punctuation(document)
+
+        # print(no_punct)
+        # 分词
+        tokens = tokenize(document)
+
+
+        # print(tokens)
         filtered_tokens = delete_stopwords(tokens, custom_stop_words)
+
+        tf_list.append(tf(filtered_tokens))
+
         cleaned_texts.append(filtered_tokens)
+
+    # print(cleaned_texts)
+    print(len(cleaned_texts))
+    idf_dict = idf(cleaned_texts)
+    # print(idf_dict)
+
+    tfidf_list = []
+    for tf_dict in tf_list:
+        tfidf_list.append(tf_idf(tf_dict,idf_dict))
+
+    # sum = 0
+    max_weight_list = []
+    for weight_dict in tfidf_list:
+        max_weight = 0
+        for word,weight in weight_dict.items():
+            max_weight = max(max_weight,weight)
+        max_weight_list.append(max_weight)
+        # sum += max_weight
+
+
+    means = np.mean(max_weight_list)
+    std_weight = np.std(max_weight_list)
+    threshold = means-0.5*std_weight
+
+    # print(means)
+    # print(std_weight)
+    # print(threshold)
+
+    data = []
+    for weight_dict in tfidf_list:
+        max_weight = 0
+        words = []
+        for word,weight in weight_dict.items():
+            words.append(word)
+            max_weight = max(max_weight,weight)
+        # max_weight_list.append(max_weight)
+        if max_weight > threshold:
+            data.append(words)
+        # else:
+        #     print(words)
+
+    print(len(data))
+    print(data)
+    # print(tfidf_list)
 
     # 创建词典和语料库
     dictionary = corpora.Dictionary(cleaned_texts)
+    # print(dictionary)
+
+
+
+
     corpus = [dictionary.doc2bow(text) for text in cleaned_texts]
     # print(corpus)
-
+'''
     # 训练 LDA 模型
     lda = models.LdaModel(corpus, num_topics=10, id2word=dictionary, passes=50)
 
@@ -142,3 +240,4 @@ if __name__ == "__main__":
     #     # 显示部分结果
     #     print(f"提取的 N-gram 特征名称（部分）：{feature_names[:10]}")
     #     print(f"词频矩阵形状：{X.shape}")
+'''
